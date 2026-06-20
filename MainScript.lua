@@ -41,7 +41,7 @@ uiListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 uiListLayout.Padding = UDim.new(0, 8)
 uiListLayout.Parent = notificationContainer
 
-local function showNotification(text, state)
+local function showNotification(text, stateOrColor)
 	local frame = Instance.new("Frame")
 	frame.Size = UDim2.new(1, 0, 0, 35)
 	frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
@@ -52,11 +52,19 @@ local function showNotification(text, state)
 	uiCorner.CornerRadius = UDim.new(0, 6)
 	uiCorner.Parent = frame
 	
+	-- Determine accent color based on variable type passed
+	local accentColor = Color3.fromRGB(200, 200, 200) -- Default Neutral Grey
+	if typeof(stateOrColor) == "boolean" then
+		accentColor = stateOrColor and Color3.fromRGB(0, 255, 130) or Color3.fromRGB(255, 70, 70)
+	elseif typeof(stateOrColor) == "Color3" then
+		accentColor = stateOrColor
+	end
+	
 	-- Colored accent line on the left side
 	local indicator = Instance.new("Frame")
 	indicator.Size = UDim2.new(0, 4, 1, 0)
 	indicator.Position = UDim2.new(0, 0, 0, 0)
-	indicator.BackgroundColor3 = state and Color3.fromRGB(0, 255, 130) or Color3.fromRGB(255, 70, 70)
+	indicator.BackgroundColor3 = accentColor
 	indicator.BackgroundTransparency = 1
 	indicator.BorderSizePixel = 0
 	indicator.Parent = frame
@@ -247,3 +255,9 @@ RunService.RenderStepped:Connect(function()
 end)
 
 Players.PlayerRemoving:Connect(updateESP)
+
+----------------------------------------------------------------
+-- Initialization Notice
+----------------------------------------------------------------
+-- This runs immediately once everything above is successfully compiled and loaded.
+showNotification("System Initialized", Color3.fromRGB(0, 160, 255))
