@@ -3,6 +3,7 @@ local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
 
 local localPlayer = Players.LocalPlayer
 local camera = Workspace.CurrentCamera
@@ -19,7 +20,87 @@ local currentTarget = nil
 -- Configuration
 local ESP_COLOR = Color3.fromRGB(255, 0, 0) -- Neon Red
 
---- Helper: Check if a player is a friend
+----------------------------------------------------------------
+-- UI Notification System
+----------------------------------------------------------------
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "CheatNotificationGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+
+local notificationContainer = Instance.new("Frame")
+notificationContainer.Name = "NotificationContainer"
+notificationContainer.Size = UDim2.new(0, 220, 0, 300)
+notificationContainer.Position = UDim2.new(1, -230, 1, -310) -- Bottom Right
+notificationContainer.BackgroundTransparency = 1
+notificationContainer.Parent = screenGui
+
+local uiListLayout = Instance.new("UIListLayout")
+uiListLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+uiListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+uiListLayout.Padding = UDim.new(0, 8)
+uiListLayout.Parent = notificationContainer
+
+local function showNotification(text, state)
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(1, 0, 0, 35)
+	frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+	frame.BackgroundTransparency = 1 -- Start transparent for fade-in
+	frame.BorderSizePixel = 0
+	
+	local uiCorner = Instance.new("UICorner")
+	uiCorner.CornerRadius = UDim.new(0, 6)
+	uiCorner.Parent = frame
+	
+	-- Colored accent line on the left side
+	local indicator = Instance.new("Frame")
+	indicator.Size = UDim2.new(0, 4, 1, 0)
+	indicator.Position = UDim2.new(0, 0, 0, 0)
+	indicator.BackgroundColor3 = state and Color3.fromRGB(0, 255, 130) or Color3.fromRGB(255, 70, 70)
+	indicator.BackgroundTransparency = 1
+	indicator.BorderSizePixel = 0
+	indicator.Parent = frame
+	
+	local uiCornerInd = Instance.new("UICorner")
+	uiCornerInd.CornerRadius = UDim.new(0, 6)
+	uiCornerInd.Parent = indicator
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, -15, 1, 0)
+	label.Position = UDim2.new(0, 10, 0, 0)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextColor3 = Color3.fromRGB(240, 240, 240)
+	label.TextTransparency = 1
+	label.TextSize = 13
+	label.Font = Enum.Font.GothamMedium
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = frame
+
+	frame.Parent = notificationContainer
+
+	-- Fade In
+	TweenService:Create(frame, TweenInfo.new(0.25), {BackgroundTransparency = 0.15}):Play()
+	TweenService:Create(indicator, TweenInfo.new(0.25), {BackgroundTransparency = 0}):Play()
+	TweenService:Create(label, TweenInfo.new(0.25), {TextTransparency = 0}):Play()
+
+	-- Wait 2 seconds, then Fade Out and Destroy
+	task.delay(2, function()
+		if frame and frame.Parent then
+			TweenService:Create(frame, TweenInfo.new(0.25), {BackgroundTransparency = 1}):Play()
+			TweenService:Create(indicator, TweenInfo.new(0.25), {BackgroundTransparency = 1}):Play()
+			local fadeOut = TweenService:Create(label, TweenInfo.new(0.25), {TextTransparency = 1})
+			fadeOut:Play()
+			fadeOut.Completed:Connect(function()
+				frame:Destroy()
+			end)
+		end
+	end)
+end
+
+----------------------------------------------------------------
+-- Core Mechanics
+----------------------------------------------------------------
 local function isFriend(player)
 	if player == localPlayer then return false end
 	local success, result = pcall(function()
@@ -28,7 +109,6 @@ local function isFriend(player)
 	return success and result
 end
 
---- Helper: Find the player closest to the center of the screen
 local function getClosestPlayerToCenter()
 	local closestPlayer = nil
 	local shortestDistance = math.huge
@@ -36,15 +116,8 @@ local function getClosestPlayerToCenter()
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		if player ~= localPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") then
-			-- Skip friends if whitelist is active
-			if friendWhitelistEnabled and isFriend(player) then
-				continue
-			end
-			
-			-- Check if alive
-			if player.Character.Humanoid.Health <= 0 then
-				continue
-			end
+			if friendWhitelistEnabled and isFriend(player) then continue end
+			if player.Character.Humanoid.Health <= 0 then continue end
 
 			local hrp = player.Character.HumanoidRootPart
 			local screenPos, onScreen = camera:WorldToViewportPoint(hrp.Position)
@@ -58,18 +131,15 @@ local function getClosestPlayerToCenter()
 			end
 		end
 	end
-
 	return closestPlayer
 end
 
---- ESP Management
 local function updateESP()
 	for _, player in ipairs(Players:GetPlayers()) do
 		if player == localPlayer then continue end
 
 		local char = player.Character
 		if char then
-			-- Handle Outline (Highlight)
 			local highlight = char:FindFirstChild("ESPHighlight")
 			local shouldHaveESP = espEnabled and (not (friendWhitelistEnabled and isFriend(player)))
 			
@@ -85,7 +155,6 @@ local function updateESP()
 					highlight.Parent = char
 				end
 				
-				-- Handle Name/Health Tag (BillboardGui)
 				local billboard = char:FindFirstChild("ESPBillboard")
 				if not billboard then
 					billboard = Instance.new("BillboardGui")
@@ -118,30 +187,28 @@ local function updateESP()
 	end
 end
 
---- Input Handling
+----------------------------------------------------------------
+-- Input Bindings
+----------------------------------------------------------------
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
 
-	-- F2: Toggle Aim Assist
 	if input.KeyCode == Enum.KeyCode.F2 then
 		aimbotEnabled = not aimbotEnabled
 		if not aimbotEnabled then currentTarget = nil end
-		print("Aim Assist:", aimbotEnabled and "ON" or "OFF")
+		showNotification("Aim Lock: " .. (aimbotEnabled and "ENABLED" or "DISABLED"), aimbotEnabled)
 	
-	-- F3: Toggle ESP
 	elseif input.KeyCode == Enum.KeyCode.F3 then
 		espEnabled = not espEnabled
 		if not espEnabled then updateESP() end
-		print("ESP:", espEnabled and "ON" or "OFF")
+		showNotification("ESP: " .. (espEnabled and "ENABLED" or "DISABLED"), espEnabled)
 		
-	-- F4: Toggle Friend Whitelist
 	elseif input.KeyCode == Enum.KeyCode.F4 then
 		friendWhitelistEnabled = not friendWhitelistEnabled
-		print("Friend Whitelist:", friendWhitelistEnabled and "ON" or "OFF")
 		if espEnabled then updateESP() end
 		if aimbotEnabled then currentTarget = nil end
+		showNotification("Friend Ignore: " .. (friendWhitelistEnabled and "ENABLED" or "DISABLED"), friendWhitelistEnabled)
 		
-	-- Track Right Click
 	elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
 		isRightClickHolding = true
 	end
@@ -150,36 +217,28 @@ end)
 UserInputService.InputEnded:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton2 then
 		isRightClickHolding = false
-		currentTarget = nil -- Clear target when letting go of right click
+		currentTarget = nil
 	end
 end)
 
---- Main Loop (Runs every frame before rendering)
 RunService.RenderStepped:Connect(function()
-	-- Update ESP visuals
-	if espEnabled then
-		updateESP()
-	end
+	if espEnabled then updateESP() end
 
-	-- Update Aim Assist
 	if aimbotEnabled and isRightClickHolding then
-		-- Target validation
 		if currentTarget then
 			local char = currentTarget.Character
 			local isDead = char and char:FindFirstChild("Humanoid") and char.Humanoid.Health <= 0
 			local isWhitelisted = friendWhitelistEnabled and isFriend(currentTarget)
 			
 			if isDead or isWhitelisted or not char:FindFirstChild("Head") then
-				currentTarget = nil -- Lose lock-on if they die, become a friend, or leave
+				currentTarget = nil
 			end
 		end
 
-		-- If no current target, look for the closest one to the crosshair
 		if not currentTarget then
 			currentTarget = getClosestPlayerToCenter()
 		end
 
-		-- Lock camera onto target's head
 		if currentTarget and currentTarget.Character and currentTarget.Character:FindFirstChild("Head") then
 			local head = currentTarget.Character.Head
 			camera.CFrame = CFrame.new(camera.CFrame.Position, head.Position)
@@ -187,5 +246,4 @@ RunService.RenderStepped:Connect(function()
 	end
 end)
 
--- Clean up ESP tags if a player leaves or resets character
 Players.PlayerRemoving:Connect(updateESP)
